@@ -101,7 +101,8 @@ def generate_vcf_files(generated_files_folder, fasta_sequences_folder, skip_chro
                               (v:Variant)-[:VARIATION_TYPE]-(st:SOTerm),
                               (v:Variant)-[:ASSOCIATION]-(p:GenomicLocation)
                      OPTIONAL MATCH (a:Allele)-[:IS_ALLELE_OF]-(g:Gene)
-                     OPTIONAL MATCH (v:Variant)-[:ASSOCATION]-(m:GeneLevelConsequence)
+                     OPTIONAL MATCH (v:Variant)-[:ASSOCATION]-(m:GeneLevelConsequence)-[:ASSOCIATION]-(g:Gene)
+                     WITH s, a, v, c, st, p, CASE WHEN g IS NOT NULL THEN collect(distinct {primaryKey: g.primaryKey, impact: m.impact, geneLevelConsequence: m.geneLevelConsequence}) ELSE [] END AS alleleGeneImpact
                      RETURN c.primaryKey AS chromosome,
                             v.globalId AS globalId,
                             right(v.paddingLeft,1) AS paddingLeft,
@@ -109,19 +110,12 @@ def generate_vcf_files(generated_files_folder, fasta_sequences_folder, skip_chro
                             v.genomicVariantSequence AS genomicVariantSequence,
                             v.hgvsNomenclature AS hgvsNomenclature,
                             v.dataProvider AS dataProvider,
-                            a.symbol AS symbol,
-                            a.symbolText as symbolText,
                             p.assembly AS assembly,
-                            collect(a.primaryKey) AS alleles,
-                            collect(g.primaryKey) AS geneSymbol,
-                            CASE WHEN g IS NOT NULL THEN collect(g.primaryKey) ELSE [] END AS alleleOfGenes,
-                            CASE WHEN m IS NOT NULL THEN collect(m.geneLevelConsequence) ELSE [] END AS geneLevelConsequence,
-                            CASE WHEN m IS NOT NULL THEN collect(m.impact) ELSE '' END AS impact,
+                            collect(distinct {primaryKey: a.primaryKey, symbol: a.symbol, symbolText: a.symbolText, alleleGeneImpact: alleleGeneImpact}) AS alleles,
                             p.start AS start,
                             p.end AS end,
                             s.name AS species,
-                            st.nameKey AS soTerm
-                     """
+                            st.nameKey AS soTerm"""
     data_source = DataSource(get_neo_uri(context_info), variants_query)
     gvf = vcf_file_generator.VcfFileGenerator(data_source,
                                               generated_files_folder,
