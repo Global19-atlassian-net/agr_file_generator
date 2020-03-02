@@ -9,10 +9,13 @@ import requests
 import urllib3
 from common import ContextInfo
 from data_source import DataSource
-from generators import (daf_file_generator, db_summary_file_generator,
+from generators import (daf_file_generator,
+                        db_summary_file_generator,
                         expression_file_generator,
                         gene_cross_reference_file_generator,
-                        orthology_file_generator, vcf_file_generator,
+                        orthology_file_generator,
+                        vcf_file_generator,
+                        graphql_schema_file_generator,
                         uniprot_cross_reference_generator)
 
 
@@ -51,6 +54,7 @@ taxon_id_fms_subtype_map = {"NCBI:txid10116": "RGD",
 @click.option('--orthology', is_flag=True, help='Generates orthology files')
 @click.option('--disease', is_flag=True, help='Generates DAF files')
 @click.option('--expression', is_flag=True, help='Generates expression files')
+@click.option('--graphql-schema', is_flag=True, help='Generates schema file GraphQL')
 @click.option('--db-summary', is_flag=True, help='Generates summary of database contents')
 @click.option('--gene-cross-reference', is_flag=True, help='Generates a file of cross references for gene objects')
 @click.option('--all-filetypes', is_flag=True, help='Generates all filetypes')
@@ -61,6 +65,7 @@ def main(vcf,
          orthology,
          disease,
          expression,
+         graphql_schema,
          db_summary,
          gene_cross_reference,
          all_filetypes,
@@ -94,6 +99,9 @@ def main(vcf,
     if expression is True or all_filetypes is True:
         click.echo('INFO:\tGenerating Expression files')
         generate_expression_file(generated_files_folder, context_info, taxon_id_fms_subtype_map, upload)
+    if graphql_schema is True:
+        click.echo('INFO:\tGenerating GraphQL Schema file')
+        generate_graphql_schema_file(generated_files_folder, context_info, upload)
     if db_summary is True or all_filetypes is True:
         click.echo('INFO:\tGenerating DB summary file')
         generate_db_summary_file(generated_files_folder, context_info, upload)
@@ -101,6 +109,7 @@ def main(vcf,
         click.echo('INFO:\tGenerating Gene Cross Reference file')
         generate_gene_cross_reference_file(generated_files_folder, context_info, upload)
     if uniprot is True or all_filetypes is True:
+        click.echo('INFO:\tGenerating UNIPROT cross reference file')
         generate_uniprot_cross_reference(generated_files_folder, input_folder, context_info, upload)
 
     end_time = time.time()
@@ -232,6 +241,26 @@ def generate_expression_file(generated_files_folder, context_info, taxon_id_fms_
                                                                    taxon_id_fms_subtype_map)
     expression.generate_file(upload_flag=upload_flag)
 
+
+def generate_graphql_schema_file(generated_files_folder, context_info, upload_flag):
+    schema_query = '''CALL apoc.meta.data() YIELD label, property, type, elementType
+                      WHERE elementType <> 'relationship'
+                            AND type <> 'RELATIONSHIP'
+                      WITH label, collect({property: property, type: type}) AS properties
+                      WITH apoc.map.fromLists(collect(label), collect(properties)) AS properties_map
+
+                      CALL apoc.meta.graph() YIELD nodes, relationships
+                      UNWIND nodes AS n
+                      WITH n, apoc.text.join(apoc.node.labels(n), '-') AS label, properties_map, relationships
+
+                      CALL apoc.create.setProperty(n, 'properties', properties_map[label]) YIELD node
+
+                      RETURN collect(node) AS nodes, relationships'''
+    data_source = DataSource(get_neo_uri(context_info), schema_query)
+    graphql_schema = graphql_schema_file_generator.GraphQLSchemaFileGenerator(data_source,
+                                                                        generated_files_folder,
+                                                                        context_info)
+    graphql_schema.generate_file(upload_flag=upload_flag)
 
 def generate_db_summary_file(generated_files_folder, context_info, upload_flag):
     db_summary_query = '''MATCH (entity)
