@@ -134,7 +134,7 @@ def generate_vcf_files(generated_files_folder, fasta_sequences_folder, skip_chro
                               (v:Variant)-[:VARIATION_TYPE]-(st:SOTerm),
                               (v:Variant)-[:ASSOCIATION]-(p:GenomicLocation)
                      OPTIONAL MATCH (a:Allele)-[:IS_ALLELE_OF]-(g:Gene)
-                     OPTIONAL MATCH (v:Variant)-[:ASSOCIATION]-(m:GeneLevelConsequence)
+                     OPTIONAL MATCH (v:Variant)-[:ASSOCIATION]-(m:GeneLevelConsequence)-[:ASSOCIATION]-(g:Gene)
                      RETURN c.primaryKey AS chromosome,
                             v.globalId AS globalId,
                             right(v.paddingLeft,1) AS paddingLeft,
